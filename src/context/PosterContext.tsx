@@ -103,6 +103,16 @@ export const PosterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return saved !== null ? JSON.parse(saved) : defaultVal;
   };
 
+  const CANVAS_NAMES = [
+    'Radiant', 'Neon', 'Brutal', 'Sonic', 'Zenith', 'Void', 'Prism', 'Cyber', 
+    'Pulse', 'Flux', 'Spark', 'Nova', 'Echo', 'Rift', 'Gloom', 'Vivid', 
+    'Bold', 'Stark', 'Prime', 'Elite', 'Chrome', 'Aura', 'Solar', 'Lunar'
+  ];
+
+  const getRandomName = () => {
+    return CANVAS_NAMES[Math.floor(Math.random() * CANVAS_NAMES.length)];
+  };
+
   const createDefaultProject = (id: string, name: string): Project => ({
     id,
     name,
@@ -122,7 +132,7 @@ export const PosterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     imagePan: { x: 0, y: 0 }
   });
 
-  const [projects, setProjects] = useState<Project[]>([createDefaultProject('default-1', 'Canvas 1')]);
+  const [projects, setProjects] = useState<Project[]>(() => [createDefaultProject('default-1', 'Radiant')]);
   const [activeProjectId, setActiveProjectId] = useState<string>('default-1');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('view');
 
@@ -134,7 +144,7 @@ export const PosterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addProject = () => {
     const id = Math.random().toString(36).substr(2, 9);
-    const newProject = createDefaultProject(id, `Canvas ${projects.length + 1}`);
+    const newProject = createDefaultProject(id, getRandomName());
     setProjects(prev => [...prev, newProject]);
     setActiveProjectId(id);
   };
