@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import ExportMenu from './ExportMenu';
 import { PosterContext } from '../../context/PosterContext';
 
@@ -8,12 +7,15 @@ import { PosterContext } from '../../context/PosterContext';
 vi.mock('../../utils/exportEngine', () => ({
   exportToZip: vi.fn(),
   exportToPdf: vi.fn(),
+  printPdf: vi.fn(),
   downloadWholeImage: vi.fn()
 }));
 
-const mockContextProps = {
+const mockContextProps: any = {
   imageBitmap: null,
   setImageBitmap: vi.fn(),
+  imageMetadata: null,
+  setImageMetadata: vi.fn(),
   gridCols: 2,
   setGridCols: vi.fn(),
   gridRows: 2,
@@ -24,10 +26,28 @@ const mockContextProps = {
   setBleedMm: vi.fn(),
   textOverlays: [],
   setTextOverlays: vi.fn(),
+  selectedTextId: null,
+  setSelectedTextId: vi.fn(),
+  imageOverlays: [],
+  setImageOverlays: vi.fn(),
+  selectedImageId: null,
+  setSelectedImageId: vi.fn(),
   imageFit: 'stretch' as any,
   setImageFit: vi.fn(),
   preserveRatio: false,
-  setPreserveRatio: vi.fn()
+  setPreserveRatio: vi.fn(),
+  imageZoom: 1,
+  setImageZoom: vi.fn(),
+  imagePan: { x: 0, y: 0 },
+  setImagePan: vi.fn(),
+  projects: [],
+  activeProjectId: '1',
+  addProject: vi.fn(),
+  removeProject: vi.fn(),
+  setActiveProject: vi.fn(),
+  updateProjectName: vi.fn(),
+  interactionMode: 'view' as any,
+  setInteractionMode: vi.fn()
 };
 
 describe('ExportMenu Component', () => {

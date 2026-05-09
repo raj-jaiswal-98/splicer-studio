@@ -1,4 +1,4 @@
-import React, { ChangeEvent } from 'react';
+import { ChangeEvent } from 'react';
 import { usePosterContext, ImageOverlay } from '../../context/PosterContext';
 import { Upload, Type, Move, Image as ImageIcon, MousePointer2, Layers } from 'lucide-react';
 import { BrutalButton } from './BrutalButton';
