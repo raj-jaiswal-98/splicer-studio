@@ -8,9 +8,9 @@ export interface Wallpaper {
 
 export const fetchRedditWallpapers = async (query: string = '', after: string | null = null): Promise<{ wallpapers: Wallpaper[], after: string | null }> => {
   const isDev = import.meta.env.DEV;
-  // Use a public CORS proxy for both API and Images in production
-  const API_BASE = isDev ? '/reddit-api' : 'https://corsproxy.io/?https://www.reddit.com';
-  const IMAGE_PROXY = isDev ? '/reddit-image' : 'https://corsproxy.io/?https://i.redd.it';
+  // Use specialized proxies for production deployment
+  const API_BASE = isDev ? '/reddit-api' : 'https://api.allorigins.win/raw?url=https://www.reddit.com';
+  const IMAGE_PROXY = isDev ? '/reddit-image' : 'https://images.weserv.nl/?url=https://i.redd.it';
   
   let endpoint = '';
   
@@ -51,7 +51,7 @@ export const fetchRedditWallpapers = async (query: string = '', after: string | 
         proxiedUrl = proxiedUrl.replace('https://i.redd.it', IMAGE_PROXY);
       } else if (!isDev && proxiedUrl.startsWith('https://')) {
         // For other high-res sources in production, also try proxying
-        proxiedUrl = `https://corsproxy.io/?${proxiedUrl}`;
+        proxiedUrl = `https://images.weserv.nl/?url=${proxiedUrl}`;
       }
 
       wallpapers.push({
