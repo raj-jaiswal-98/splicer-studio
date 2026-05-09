@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchRedditWallpapers, fetchNasaImages, Wallpaper } from '../../utils/api';
+import { fetchRedditWallpapers, fetchNasaImages } from '../../utils/api';
 import { usePosterContext } from '../../context/PosterContext';
 import { BrutalButton } from '../ui/BrutalButton';
 import { Search, Image as ImageIcon, Globe, Rocket, Layers } from 'lucide-react';
