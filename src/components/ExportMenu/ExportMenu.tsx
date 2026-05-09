@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { exportToZip, exportToPdf, downloadWholeImage } from '../../utils/exportEngine';
+import { exportToZip, exportToPdf, printPdf, downloadWholeImage } from '../../utils/exportEngine';
 import { usePosterContext } from '../../context/PosterContext';
+import { Printer } from 'lucide-react';
 
 const ExportMenu: React.FC = () => {
-  const { imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageFit } = usePosterContext();
+  const { imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageOverlays, imageFit, imageZoom, imagePan } = usePosterContext();
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -12,7 +13,7 @@ const ExportMenu: React.FC = () => {
     setIsExporting(true);
     setProgress(0);
     try {
-      await exportToZip(imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageFit, setProgress);
+      await exportToZip(imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageOverlays, imageFit, imageZoom, imagePan, setProgress);
     } catch (err) {
       console.error(err);
       alert('Failed to export ZIP');
@@ -25,10 +26,23 @@ const ExportMenu: React.FC = () => {
     setIsExporting(true);
     setProgress(0);
     try {
-      await exportToPdf(imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageFit, setProgress);
+      await exportToPdf(imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageOverlays, imageFit, imageZoom, imagePan, setProgress);
     } catch (err) {
       console.error(err);
       alert('Failed to export PDF');
+    }
+    setIsExporting(false);
+  };
+
+  const handlePrint = async () => {
+    if (!imageBitmap) return alert('No image loaded!');
+    setIsExporting(true);
+    setProgress(0);
+    try {
+      await printPdf(imageBitmap, gridCols, gridRows, paperSize, bleedMm, textOverlays, imageOverlays, imageFit, imageZoom, imagePan, setProgress);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to print PDF');
     }
     setIsExporting(false);
   };
@@ -37,7 +51,7 @@ const ExportMenu: React.FC = () => {
     if (!imageBitmap) return alert('No image loaded!');
     setIsExporting(true);
     try {
-      await downloadWholeImage(imageBitmap, textOverlays);
+      await downloadWholeImage(imageBitmap, textOverlays, imageOverlays);
     } catch (err) {
       console.error(err);
       alert('Failed to download image');
@@ -72,6 +86,14 @@ const ExportMenu: React.FC = () => {
         disabled={!imageBitmap || isExporting}
       >
         Export PDF
+      </button>
+      <button 
+        className="brutalist-button" 
+        onClick={handlePrint}
+        disabled={!imageBitmap || isExporting}
+        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--text-color)', color: 'var(--bg-color)' }}
+      >
+        <Printer size={16} /> Print
       </button>
     </div>
   );

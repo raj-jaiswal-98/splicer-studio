@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { PaperSize } from '../utils/canvasEngine';
 
 export interface TextOverlay {
@@ -14,6 +14,7 @@ export interface TextOverlay {
 }
 
 export type ImageFitMode = 'cover' | 'contain' | 'stretch' | 'contain-blur' | 'fit-width' | 'fit-height';
+export type InteractionMode = 'view' | 'image' | 'text';
 
 export interface ImageMetadata {
   filename: string;
@@ -22,48 +23,180 @@ export interface ImageMetadata {
   height: number;
 }
 
+export interface ImageOverlay {
+  id: string;
+  imageBitmap: ImageBitmap;
+  metadata: ImageMetadata;
+  x: number; // Center X in virtual poster coords
+  y: number; // Center Y in virtual poster coords
+  scale: number; // Multiplier, default 1
+  rotation: number; // Degrees, default 0
+  opacity: number; // 0 to 1, default 1
+  zIndex: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  imageBitmap: ImageBitmap | null;
+  imageMetadata: ImageMetadata | null;
+  gridCols: number;
+  gridRows: number;
+  paperSize: PaperSize;
+  bleedMm: number;
+  textOverlays: TextOverlay[];
+  selectedTextId: string | null;
+  imageOverlays: ImageOverlay[];
+  selectedImageId: string | null;
+  imageFit: ImageFitMode;
+  preserveRatio: boolean;
+  imageZoom: number;
+  imagePan: { x: number; y: number };
+}
+
 interface PosterContextProps {
   imageBitmap: ImageBitmap | null;
-  setImageBitmap: (bitmap: ImageBitmap | null) => void;
+  setImageBitmap: React.Dispatch<React.SetStateAction<ImageBitmap | null>>;
   imageMetadata: ImageMetadata | null;
-  setImageMetadata: (meta: ImageMetadata | null) => void;
+  setImageMetadata: React.Dispatch<React.SetStateAction<ImageMetadata | null>>;
   gridCols: number;
-  setGridCols: (cols: number) => void;
+  setGridCols: React.Dispatch<React.SetStateAction<number>>;
   gridRows: number;
-  setGridRows: (rows: number) => void;
+  setGridRows: React.Dispatch<React.SetStateAction<number>>;
   paperSize: PaperSize;
-  setPaperSize: (size: PaperSize) => void;
+  setPaperSize: React.Dispatch<React.SetStateAction<PaperSize>>;
   bleedMm: number;
-  setBleedMm: (bleed: number) => void;
+  setBleedMm: React.Dispatch<React.SetStateAction<number>>;
   textOverlays: TextOverlay[];
   setTextOverlays: React.Dispatch<React.SetStateAction<TextOverlay[]>>;
   selectedTextId: string | null;
-  setSelectedTextId: (id: string | null) => void;
+  setSelectedTextId: React.Dispatch<React.SetStateAction<string | null>>;
+  imageOverlays: ImageOverlay[];
+  setImageOverlays: React.Dispatch<React.SetStateAction<ImageOverlay[]>>;
+  selectedImageId: string | null;
+  setSelectedImageId: React.Dispatch<React.SetStateAction<string | null>>;
   imageFit: ImageFitMode;
-  setImageFit: (fit: ImageFitMode) => void;
+  setImageFit: React.Dispatch<React.SetStateAction<ImageFitMode>>;
   preserveRatio: boolean;
-  setPreserveRatio: (preserve: boolean) => void;
+  setPreserveRatio: React.Dispatch<React.SetStateAction<boolean>>;
+  imageZoom: number;
+  setImageZoom: React.Dispatch<React.SetStateAction<number>>;
+  imagePan: { x: number; y: number };
+  setImagePan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+
+  projects: Project[];
+  activeProjectId: string;
+  addProject: () => void;
+  removeProject: (id: string) => void;
+  setActiveProject: (id: string) => void;
+  updateProjectName: (id: string, name: string) => void;
+  
+  interactionMode: InteractionMode;
+  setInteractionMode: React.Dispatch<React.SetStateAction<InteractionMode>>;
 }
 
 export const PosterContext = createContext<PosterContextProps | undefined>(undefined);
 
 export const PosterProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [imageBitmap, setImageBitmap] = useState<ImageBitmap | null>(null);
-  const [imageMetadata, setImageMetadata] = useState<ImageMetadata | null>(null);
-  
   const getSaved = <T,>(key: string, defaultVal: T): T => {
     const saved = localStorage.getItem(`poster-settings-${key}`);
     return saved !== null ? JSON.parse(saved) : defaultVal;
   };
 
-  const [gridCols, setGridCols] = useState<number>(() => getSaved('gridCols', 2));
-  const [gridRows, setGridRows] = useState<number>(() => getSaved('gridRows', 2));
-  const [paperSize, setPaperSize] = useState<PaperSize>(() => getSaved('paperSize', 'A4'));
-  const [bleedMm, setBleedMm] = useState<number>(() => getSaved('bleedMm', 0));
-  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
-  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
-  const [imageFit, setImageFit] = useState<ImageFitMode>(() => getSaved('imageFit', 'cover'));
-  const [preserveRatio, setPreserveRatio] = useState<boolean>(() => getSaved('preserveRatio', true));
+  const createDefaultProject = (id: string, name: string): Project => ({
+    id,
+    name,
+    imageBitmap: null,
+    imageMetadata: null,
+    gridCols: getSaved('gridCols', 2),
+    gridRows: getSaved('gridRows', 2),
+    paperSize: getSaved('paperSize', 'A4'),
+    bleedMm: getSaved('bleedMm', 0),
+    textOverlays: [],
+    selectedTextId: null,
+    imageOverlays: [],
+    selectedImageId: null,
+    imageFit: getSaved('imageFit', 'cover'),
+    preserveRatio: getSaved('preserveRatio', false),
+    imageZoom: 1,
+    imagePan: { x: 0, y: 0 }
+  });
+
+  const [projects, setProjects] = useState<Project[]>([createDefaultProject('default-1', 'Canvas 1')]);
+  const [activeProjectId, setActiveProjectId] = useState<string>('default-1');
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('view');
+
+  const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
+
+  const updateActiveProject = (updates: Partial<Project>) => {
+    setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, ...updates } : p));
+  };
+
+  const addProject = () => {
+    const id = Math.random().toString(36).substr(2, 9);
+    const newProject = createDefaultProject(id, `Canvas ${projects.length + 1}`);
+    setProjects(prev => [...prev, newProject]);
+    setActiveProjectId(id);
+  };
+
+  const removeProject = (id: string) => {
+    if (projects.length <= 1) return;
+    setProjects(prev => prev.filter(p => p.id !== id));
+    if (activeProjectId === id) {
+      const remaining = projects.filter(p => p.id !== id);
+      setActiveProjectId(remaining[remaining.length - 1].id);
+    }
+  };
+
+  const updateProjectName = (id: string, name: string) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, name } : p));
+  };
+
+  const applySetStateAction = <T,>(action: React.SetStateAction<T>, currentVal: T): T => {
+    return typeof action === 'function' ? (action as (prev: T) => T)(currentVal) : action;
+  };
+
+  const imageBitmap = activeProject.imageBitmap;
+  const setImageBitmap = (val: React.SetStateAction<ImageBitmap | null>) => updateActiveProject({ imageBitmap: applySetStateAction(val, activeProject.imageBitmap) });
+  
+  const imageMetadata = activeProject.imageMetadata;
+  const setImageMetadata = (val: React.SetStateAction<ImageMetadata | null>) => updateActiveProject({ imageMetadata: applySetStateAction(val, activeProject.imageMetadata) });
+  
+  const gridCols = activeProject.gridCols;
+  const setGridCols = (val: React.SetStateAction<number>) => updateActiveProject({ gridCols: applySetStateAction(val, activeProject.gridCols) });
+  
+  const gridRows = activeProject.gridRows;
+  const setGridRows = (val: React.SetStateAction<number>) => updateActiveProject({ gridRows: applySetStateAction(val, activeProject.gridRows) });
+  
+  const paperSize = activeProject.paperSize;
+  const setPaperSize = (val: React.SetStateAction<PaperSize>) => updateActiveProject({ paperSize: applySetStateAction(val, activeProject.paperSize) });
+  
+  const bleedMm = activeProject.bleedMm;
+  const setBleedMm = (val: React.SetStateAction<number>) => updateActiveProject({ bleedMm: applySetStateAction(val, activeProject.bleedMm) });
+  
+  const textOverlays = activeProject.textOverlays;
+  const setTextOverlays = (val: React.SetStateAction<TextOverlay[]>) => updateActiveProject({ textOverlays: applySetStateAction(val, activeProject.textOverlays) });
+  
+  const selectedTextId = activeProject.selectedTextId;
+  const setSelectedTextId = (val: React.SetStateAction<string | null>) => updateActiveProject({ selectedTextId: applySetStateAction(val, activeProject.selectedTextId) });
+  
+  const imageOverlays = activeProject.imageOverlays;
+  const setImageOverlays = (val: React.SetStateAction<ImageOverlay[]>) => updateActiveProject({ imageOverlays: applySetStateAction(val, activeProject.imageOverlays) });
+  
+  const selectedImageId = activeProject.selectedImageId;
+  const setSelectedImageId = (val: React.SetStateAction<string | null>) => updateActiveProject({ selectedImageId: applySetStateAction(val, activeProject.selectedImageId) });
+
+  const imageFit = activeProject.imageFit;
+  const setImageFit = (val: React.SetStateAction<ImageFitMode>) => updateActiveProject({ imageFit: applySetStateAction(val, activeProject.imageFit) });
+  
+  const preserveRatio = activeProject.preserveRatio;
+  const setPreserveRatio = (val: React.SetStateAction<boolean>) => updateActiveProject({ preserveRatio: applySetStateAction(val, activeProject.preserveRatio) });
+  
+  const imageZoom = activeProject.imageZoom;
+  const setImageZoom = (val: React.SetStateAction<number>) => updateActiveProject({ imageZoom: applySetStateAction(val, activeProject.imageZoom) });
+  
+  const imagePan = activeProject.imagePan;
+  const setImagePan = (val: React.SetStateAction<{x: number, y: number}>) => updateActiveProject({ imagePan: applySetStateAction(val, activeProject.imagePan) });
 
   useEffect(() => {
     localStorage.setItem('poster-settings-gridCols', JSON.stringify(gridCols));
@@ -77,26 +210,22 @@ export const PosterProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   return (
     <PosterContext.Provider
       value={{
-        imageBitmap,
-        setImageBitmap,
-        imageMetadata,
-        setImageMetadata,
-        gridCols,
-        setGridCols,
-        gridRows,
-        setGridRows,
-        paperSize,
-        setPaperSize,
-        bleedMm,
-        setBleedMm,
-        textOverlays,
-        setTextOverlays,
-        selectedTextId,
-        setSelectedTextId,
-        imageFit,
-        setImageFit,
-        preserveRatio,
-        setPreserveRatio,
+        imageBitmap, setImageBitmap,
+        imageMetadata, setImageMetadata,
+        gridCols, setGridCols,
+        gridRows, setGridRows,
+        paperSize, setPaperSize,
+        bleedMm, setBleedMm,
+        textOverlays, setTextOverlays,
+        selectedTextId, setSelectedTextId,
+        imageOverlays, setImageOverlays,
+        selectedImageId, setSelectedImageId,
+        imageFit, setImageFit,
+        preserveRatio, setPreserveRatio,
+        imageZoom, setImageZoom,
+        imagePan, setImagePan,
+        projects, activeProjectId, addProject, removeProject, setActiveProject: setActiveProjectId, updateProjectName,
+        interactionMode, setInteractionMode
       }}
     >
       {children}

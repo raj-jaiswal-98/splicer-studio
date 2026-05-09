@@ -11,4 +11,18 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
   },
+  server: {
+    proxy: {
+      '/reddit-api': {
+        target: 'https://www.reddit.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/reddit-api/, '')
+      },
+      '/reddit-image': {
+        target: 'https://i.redd.it',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/reddit-image/, '')
+      }
+    }
+  }
 })

@@ -10,45 +10,53 @@ const BrutalTooltip: React.FC<BrutalTooltipProps> = ({ content }) => {
 
   return (
     <div 
-      className="relative inline-flex items-center justify-center ml-2"
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: '0.5rem',
+      }}
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
     >
-      <Info size={16} className="cursor-pointer text-gray-700 hover:text-black transition-colors" />
+      <Info size={16} className="cursor-pointer" style={{ color: 'var(--text-color)', opacity: 0.7 }} />
       
       {isVisible && (
         <div 
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 text-sm brutalist-border brutalist-shadow"
+          className="brutalist-border brutalist-shadow"
           style={{
-            backgroundColor: 'var(--card-bg)',
-            color: 'var(--text-color)',
+            position: 'absolute',
+            zIndex: 1000,
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            marginBottom: '0.75rem',
+            width: '240px',
+            padding: '1rem',
+            fontSize: '0.875rem',
+            backgroundColor: '#ffff00', // Bright Neo-Brutalist Yellow
+            color: '#000000',
             fontFamily: 'var(--font-main)',
-            fontWeight: 700,
+            fontWeight: 800,
             lineHeight: 1.4,
             pointerEvents: 'none',
+            textAlign: 'center',
           }}
         >
           {content}
           {/* Brutalist pointer triangle */}
           <div 
-            className="absolute top-full left-1/2 -translate-x-1/2"
             style={{
+              position: 'absolute',
+              top: '100%',
+              left: '50%',
+              transform: 'translateX(-50%)',
               width: 0,
               height: 0,
               borderLeft: '8px solid transparent',
               borderRight: '8px solid transparent',
-              borderTop: '8px solid var(--border-color)',
-            }}
-          />
-          <div 
-            className="absolute top-full left-1/2 -translate-x-1/2"
-            style={{
-              width: 0,
-              height: 0,
-              marginTop: '-4px',
-              borderLeft: '8px solid transparent',
-              borderRight: '8px solid transparent',
-              borderTop: '8px solid var(--card-bg)',
+              borderTop: '8px solid var(--text-color)',
             }}
           />
         </div>

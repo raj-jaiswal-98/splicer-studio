@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import { calculateSlices, PaperSize } from './canvasEngine';
-import { TextOverlay, ImageFitMode } from '../context/PosterContext';
+import { TextOverlay, ImageFitMode, ImageOverlay } from '../context/PosterContext';
 
 // Utility to create a blob for a specific slice to manage memory effectively
 const createSliceBlob = async (
@@ -10,6 +10,7 @@ const createSliceBlob = async (
   targetWidth: number,
   targetHeight: number,
   textOverlays: TextOverlay[],
+  imageOverlays: ImageOverlay[],
   imageFit: ImageFitMode
 ): Promise<Blob> => {
   let canvas: OffscreenCanvas | HTMLCanvasElement;
@@ -52,6 +53,32 @@ const createSliceBlob = async (
     sliceConfig.localW,
     sliceConfig.localH
   );
+
+  // Draw floating Image Overlays
+  const sortedImageOverlays = [...imageOverlays].sort((a, b) => a.zIndex - b.zIndex);
+  sortedImageOverlays.forEach(overlay => {
+    ctx!.save();
+    
+    const sliceX = (overlay.x * sliceConfig.textScaleX) + sliceConfig.textOffsetX;
+    const sliceY = (overlay.y * sliceConfig.textScaleY) + sliceConfig.textOffsetY;
+    
+    ctx!.translate(sliceX, sliceY);
+    ctx!.rotate((overlay.rotation * Math.PI) / 180);
+    ctx!.scale(overlay.scale * sliceConfig.textScaleX, overlay.scale * sliceConfig.textScaleY);
+    ctx!.globalAlpha = overlay.opacity;
+    
+    const imgWidth = overlay.imageBitmap.width;
+    const imgHeight = overlay.imageBitmap.height;
+    ctx!.drawImage(
+      overlay.imageBitmap,
+      -imgWidth / 2,
+      -imgHeight / 2,
+      imgWidth,
+      imgHeight
+    );
+    
+    ctx!.restore();
+  });
 
   // Draw Text Overlays using the pre-calculated text scale and offsets
   textOverlays.forEach(text => {
@@ -105,7 +132,10 @@ export const exportToZip = async (
   paperSize: PaperSize,
   bleedMm: number,
   textOverlays: TextOverlay[],
+  imageOverlays: ImageOverlay[],
   imageFit: ImageFitMode,
+  imageZoom: number,
+  imagePan: { x: number; y: number },
   onProgress?: (progress: number) => void
 ): Promise<void> => {
   const { slices, targetWidth, targetHeight } = calculateSlices(
@@ -115,14 +145,16 @@ export const exportToZip = async (
     gridRows,
     paperSize,
     bleedMm,
-    imageFit
+    imageFit,
+    imageZoom,
+    imagePan
   );
 
   const zip = new JSZip();
   let completed = 0;
 
   for (const slice of slices) {
-    const blob = await createSliceBlob(imageBitmap, slice, targetWidth, targetHeight, textOverlays, imageFit);
+    const blob = await createSliceBlob(imageBitmap, slice, targetWidth, targetHeight, textOverlays, imageOverlays, imageFit);
     // Name the file dynamically based on its row and column
     zip.file(`slice_${slice.row + 1}_${slice.col + 1}.jpg`, blob);
     
@@ -150,7 +182,10 @@ export const exportToPdf = async (
   paperSize: PaperSize,
   bleedMm: number,
   textOverlays: TextOverlay[],
+  imageOverlays: ImageOverlay[],
   imageFit: ImageFitMode,
+  imageZoom: number,
+  imagePan: { x: number; y: number },
   onProgress?: (progress: number) => void
 ): Promise<void> => {
   const { slices, targetWidth, targetHeight } = calculateSlices(
@@ -160,7 +195,9 @@ export const exportToPdf = async (
     gridRows,
     paperSize,
     bleedMm,
-    imageFit
+    imageFit,
+    imageZoom,
+    imagePan
   );
 
   // Setup jsPDF. By using 'px' as the unit and the exact target dimensions,
@@ -179,7 +216,7 @@ export const exportToPdf = async (
     // Add a new page for every slice EXCEPT the first one
     if (i > 0) pdf.addPage([targetWidth, targetHeight]);
     
-    const blob = await createSliceBlob(imageBitmap, slice, targetWidth, targetHeight, textOverlays, imageFit);
+    const blob = await createSliceBlob(imageBitmap, slice, targetWidth, targetHeight, textOverlays, imageOverlays, imageFit);
     
     // Convert blob to Uint8Array which jsPDF can consume natively
     const arrayBuffer = await blob.arrayBuffer();
@@ -194,9 +231,63 @@ export const exportToPdf = async (
   pdf.save('poster_slices.pdf');
 };
 
+export const printPdf = async (
+  imageBitmap: ImageBitmap,
+  gridCols: number,
+  gridRows: number,
+  paperSize: PaperSize,
+  bleedMm: number,
+  textOverlays: TextOverlay[],
+  imageOverlays: ImageOverlay[],
+  imageFit: ImageFitMode,
+  imageZoom: number,
+  imagePan: { x: number; y: number },
+  onProgress?: (progress: number) => void
+): Promise<void> => {
+  const { slices, targetWidth, targetHeight } = calculateSlices(
+    imageBitmap.width,
+    imageBitmap.height,
+    gridCols,
+    gridRows,
+    paperSize,
+    bleedMm,
+    imageFit,
+    imageZoom,
+    imagePan
+  );
+
+  const pdf = new jsPDF({
+    orientation: targetWidth > targetHeight ? 'landscape' : 'portrait',
+    unit: 'px',
+    format: [targetWidth, targetHeight]
+  });
+
+  let completed = 0;
+
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i];
+    if (i > 0) pdf.addPage([targetWidth, targetHeight]);
+    
+    const blob = await createSliceBlob(imageBitmap, slice, targetWidth, targetHeight, textOverlays, imageOverlays, imageFit);
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    pdf.addImage(uint8Array, 'JPEG', 0, 0, targetWidth, targetHeight);
+    
+    completed++;
+    if (onProgress) onProgress((completed / slices.length) * 100);
+  }
+
+  pdf.autoPrint();
+  const blob = pdf.output('blob');
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+};
+
 export const downloadWholeImage = async (
   imageBitmap: ImageBitmap,
-  textOverlays: TextOverlay[]
+  textOverlays: TextOverlay[],
+  imageOverlays: ImageOverlay[]
 ): Promise<void> => {
   let canvas: OffscreenCanvas | HTMLCanvasElement;
   let ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
@@ -215,29 +306,50 @@ export const downloadWholeImage = async (
 
   ctx.drawImage(imageBitmap, 0, 0);
 
-    // 3. Draw Text Overlays
-    textOverlays.forEach(text => {
-      ctx!.save();
-      
-      // Calculate font style string
-      const fontStyle = text.isItalic ? 'italic' : 'normal';
-      const fontWeight = text.isBold ? 'bold' : 'normal';
-      const fontFamily = text.fontFamily || 'Space Grotesk';
-      
-      ctx!.font = `${fontStyle} ${fontWeight} ${text.fontSize}px ${fontFamily}, sans-serif`;
-      ctx!.fillStyle = text.color;
-      ctx!.textAlign = 'center';
-      ctx!.textBaseline = 'middle';
-      
-      // Add text shadow for visibility (similar to preview)
-      ctx!.shadowColor = '#000000';
-      ctx!.shadowBlur = 4;
-      ctx!.shadowOffsetX = 2;
-      ctx!.shadowOffsetY = 2;
-      
-      ctx!.fillText(text.text, text.x, text.y);
-      ctx!.restore();
-    });
+  // Draw floating Image Overlays
+  const sortedImageOverlays = [...imageOverlays].sort((a, b) => a.zIndex - b.zIndex);
+  sortedImageOverlays.forEach(overlay => {
+    ctx!.save();
+    ctx!.translate(overlay.x, overlay.y);
+    ctx!.rotate((overlay.rotation * Math.PI) / 180);
+    ctx!.scale(overlay.scale, overlay.scale);
+    ctx!.globalAlpha = overlay.opacity;
+    
+    const imgWidth = overlay.imageBitmap.width;
+    const imgHeight = overlay.imageBitmap.height;
+    ctx!.drawImage(
+      overlay.imageBitmap,
+      -imgWidth / 2,
+      -imgHeight / 2,
+      imgWidth,
+      imgHeight
+    );
+    ctx!.restore();
+  });
+
+  // Draw Text Overlays
+  textOverlays.forEach(text => {
+    ctx!.save();
+    
+    // Calculate font style string
+    const fontStyle = text.isItalic ? 'italic' : 'normal';
+    const fontWeight = text.isBold ? 'bold' : 'normal';
+    const fontFamily = text.fontFamily || 'Space Grotesk';
+    
+    ctx!.font = `${fontStyle} ${fontWeight} ${text.fontSize}px ${fontFamily}, sans-serif`;
+    ctx!.fillStyle = text.color;
+    ctx!.textAlign = 'center';
+    ctx!.textBaseline = 'middle';
+    
+    // Add text shadow for visibility (similar to preview)
+    ctx!.shadowColor = '#000000';
+    ctx!.shadowBlur = 4;
+    ctx!.shadowOffsetX = 2;
+    ctx!.shadowOffsetY = 2;
+    
+    ctx!.fillText(text.text, text.x, text.y);
+    ctx!.restore();
+  });
 
   let blob: Blob;
   if (canvas instanceof OffscreenCanvas) {

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import './index.css';
-import TemplateGallery from './components/TemplateGallery';
+import WallpaperGallery from './components/TemplateGallery/WallpaperGallery';
 import CanvasEditor from './components/CanvasEditor';
 import ControlPanel from './components/ControlPanel';
 import ExportMenu from './components/ExportMenu';
 import { BrutalButton } from './components/ui/BrutalButton';
 import { TextToolbar } from './components/ui/TextToolbar';
+import { CanvasToolbar } from './components/ui/CanvasToolbar';
 
 function App() {
   type Theme = 'light' | 'dark' | 'monokai';
@@ -52,7 +53,8 @@ function App() {
           </BrutalButton>
         </div>
         
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '2rem' }}>
+          <CanvasToolbar />
           <TextToolbar />
         </div>
 
@@ -60,7 +62,7 @@ function App() {
       </header>
       
       <aside className="sidebar-left">
-        <TemplateGallery />
+        <WallpaperGallery />
       </aside>
       
       <main className="main-content">

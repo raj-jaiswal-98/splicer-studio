@@ -19,7 +19,9 @@ export const calculateSlices = (
   gridRows: number,
   paperSize: PaperSize,
   bleedMm: number,
-  imageFit: ImageFitMode = 'stretch'
+  imageFit: ImageFitMode = 'stretch',
+  imageZoom: number = 1,
+  imagePan: { x: number; y: number } = { x: 0, y: 0 }
 ) => {
   const pixelsPerMm = 11.81;
   const bleedPixels = bleedMm * pixelsPerMm;
@@ -60,6 +62,23 @@ export const calculateSlices = (
     drawX = (posterWidth - imageWidth * scale) / 2;
     drawY = 0;
   }
+
+  // Apply Image Pan and Zoom
+  const prevWidth = imageWidth * scaleX;
+  const prevHeight = imageHeight * scaleY;
+  
+  scaleX *= imageZoom;
+  scaleY *= imageZoom;
+  
+  const newWidth = imageWidth * scaleX;
+  const newHeight = imageHeight * scaleY;
+  
+  // Center the zoom relative to the original fit bounding box
+  drawX -= (newWidth - prevWidth) / 2;
+  drawY -= (newHeight - prevHeight) / 2;
+  
+  drawX += imagePan.x;
+  drawY += imagePan.y;
 
   let bgScaleX = scaleX;
   let bgScaleY = scaleY;

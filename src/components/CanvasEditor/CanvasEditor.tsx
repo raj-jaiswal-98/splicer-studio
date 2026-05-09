@@ -1,13 +1,12 @@
-import React, { useRef, useEffect, ChangeEvent, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { usePosterContext } from '../../context/PosterContext';
 import { calculateSlices } from '../../utils/canvasEngine';
-import { Upload, Type } from 'lucide-react';
+import { TabBar } from '../ui/TabBar';
+import { FloatingImageLayer } from './FloatingImageLayer';
 
 const CanvasEditor = () => {
   const { 
     imageBitmap, 
-    setImageBitmap, 
-    setImageMetadata,
     gridCols, 
     gridRows, 
     paperSize, 
@@ -16,82 +15,115 @@ const CanvasEditor = () => {
     setTextOverlays,
     selectedTextId,
     setSelectedTextId,
-    imageFit
+    imageOverlays,
+    setImageOverlays,
+    selectedImageId,
+    setSelectedImageId,
+    imageFit,
+    imageZoom,
+    setImageZoom,
+    imagePan,
+    setImagePan,
+    interactionMode
   } = usePosterContext();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  // ... (keep handleFileUpload, handleAddText, etc.) ...
-  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [viewZoom, setViewZoom] = useState(1);
+  const [viewPan, setViewPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
 
-    console.log(`[CanvasEditor] File selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+  // Wheel event must be non-passive to prevent browser scroll/zoom
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-    try {
-      console.log(`[CanvasEditor] Creating ImageBitmap...`);
-      const bitmap = await window.createImageBitmap(file);
-      console.log(`[CanvasEditor] ImageBitmap created! Resolution: ${bitmap.width}x${bitmap.height}`);
-      setImageBitmap(bitmap);
-      setImageMetadata({
-        filename: file.name,
-        fileSize: file.size,
-        width: bitmap.width,
-        height: bitmap.height
-      });
-    } catch (err) {
-      console.error("[CanvasEditor] Failed to load image", err);
-      alert("Could not load image file.");
-    }
-  };
-
-  const handleAddText = () => {
-    if (!imageBitmap) return;
-    const newOverlay = {
-      id: Math.random().toString(36).substr(2, 9),
-      text: "EDIT ME",
-      x: imageBitmap.width / 2,
-      y: imageBitmap.height / 2,
-      fontSize: imageBitmap.width * 0.05,
-      color: '#ff00ff',
-      fontFamily: 'var(--font-main)',
-      isBold: true,
-      isItalic: false
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (!imageBitmap) return;
+      
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      if (interactionMode === 'view') {
+        setViewZoom(prev => Math.max(0.1, Math.min(10, prev * zoomFactor)));
+      } else if (interactionMode === 'image') {
+        setImageZoom(prev => Math.max(0.1, Math.min(10, prev * zoomFactor)));
+      }
     };
-    setTextOverlays([...textOverlays, newOverlay]);
-    setSelectedTextId(newOverlay.id);
+
+    el.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleNativeWheel);
+  }, [imageBitmap, interactionMode, setImageZoom]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!imageBitmap) return;
+    
+    // Deselect text and images if clicking background
+    if ((e.target as HTMLElement).tagName === 'CANVAS' || e.target === containerRef.current || e.target === workspaceRef.current) {
+      setSelectedTextId(null);
+      setSelectedImageId(null);
+      if (interactionMode === 'view' || interactionMode === 'image') {
+        setIsPanning(true);
+      }
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingId || !imageBitmap || !containerRef.current) return;
-    
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    if (!imageBitmap || !workspaceRef.current) return;
 
-    setTextOverlays(prev => prev.map(t => 
-      t.id === draggingId ? { ...t, x: x / scale, y: y / scale } : t
-    ));
+    if (isPanning) {
+      if (interactionMode === 'view') {
+        setViewPan(prev => ({ x: prev.x + e.movementX, y: prev.y + e.movementY }));
+      } else if (interactionMode === 'image') {
+        // Image pan moves the underlying image in virtual poster coordinates
+        setImagePan(prev => ({ 
+          x: prev.x + e.movementX / (scale * viewZoom), 
+          y: prev.y + e.movementY / (scale * viewZoom) 
+        }));
+      }
+    } else if (draggingId && interactionMode === 'text') {
+      const workspaceRect = workspaceRef.current.getBoundingClientRect();
+      const rawX = e.clientX - workspaceRect.left;
+      const rawY = e.clientY - workspaceRect.top;
+
+      // Convert from screen CSS-transformed pixels to virtual canvas layout pixels
+      const localX = rawX / viewZoom;
+      const localY = rawY / viewZoom;
+
+      // Convert to virtual poster coordinates
+      const posterX = localX / scale;
+      const posterY = localY / scale;
+
+      // Get slice offsets to reverse-map into image source coordinates
+      const { slices } = calculateSlices(imageBitmap.width, imageBitmap.height, gridCols, gridRows, paperSize, bleedMm, imageFit, imageZoom, imagePan);
+      const slice = slices[0];
+      if (slice) {
+        const textX = (posterX - slice.textOffsetX) / slice.textScaleX;
+        const textY = (posterY - slice.textOffsetY) / slice.textScaleY;
+
+        if (selectedTextId) {
+          setTextOverlays(prev => prev.map(t => 
+            t.id === draggingId ? { ...t, x: textX, y: textY } : t
+          ));
+        } else if (selectedImageId) {
+          setImageOverlays(prev => prev.map(t => 
+            t.id === draggingId ? { ...t, x: textX, y: textY } : t
+          ));
+        }
+      }
+    }
   };
 
   const handleMouseUp = () => {
+    setIsPanning(false);
     setDraggingId(null);
-  };
-
-  const handleContainerClick = (e: React.MouseEvent) => {
-    // If we click directly on the container (not on a text overlay), deselect text
-    if (e.target === containerRef.current || (e.target as HTMLElement).tagName === 'CANVAS') {
-      setSelectedTextId(null);
-    }
   };
 
   useEffect(() => {
     if (!imageBitmap || !canvasRef.current || !containerRef.current) return;
-
-    console.log(`[CanvasEditor] Rendering canvas preview... Grid: ${gridCols}x${gridRows}, Fit: ${imageFit}`);
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -104,24 +136,21 @@ const CanvasEditor = () => {
       gridRows,
       paperSize,
       bleedMm,
-      imageFit
+      imageFit,
+      imageZoom,
+      imagePan
     );
 
-    console.log(`[CanvasEditor] Slices calculated. Total slices: ${slices.length}`);
-
-    // The virtual poster pixel dimensions
     const posterWidth = targetWidth * gridCols;
     const posterHeight = targetHeight * gridRows;
 
     const containerWidth = containerRef.current.clientWidth;
-    // Scale the virtual poster to fit inside the container
     const currentScale = containerWidth / posterWidth;
     setScale(currentScale);
     
     canvas.width = posterWidth * currentScale;
     canvas.height = posterHeight * currentScale;
 
-    // Fill background
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -159,38 +188,14 @@ const CanvasEditor = () => {
       ctx.restore();
     });
 
-  }, [imageBitmap, gridCols, gridRows, paperSize, bleedMm, imageFit]);
+  }, [imageBitmap, gridCols, gridRows, paperSize, bleedMm, imageFit, imageZoom, imagePan]);
 
   return (
-    <div className="brutalist-card" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h2>Canvas Editor</h2>
-        
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {imageBitmap && (
-            <button className="brutalist-button" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={handleAddText}>
-              <Type size={20} />
-              Add Text
-            </button>
-          )}
-          {!imageBitmap && (
-            <label className="brutalist-button" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <Upload size={20} />
-              Upload Image
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleFileUpload} 
-                style={{ display: 'none' }} 
-              />
-            </label>
-          )}
-        </div>
-      </div>
+    <div className="brutalist-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+      <TabBar />
 
       <div 
         ref={containerRef}
-        className="brutalist-border" 
         style={{ 
           flex: 1, 
           backgroundColor: 'var(--panel-bg)', 
@@ -198,72 +203,120 @@ const CanvasEditor = () => {
           alignItems: 'center', 
           justifyContent: 'center',
           overflow: 'hidden',
-          position: 'relative'
+          position: 'relative',
+          cursor: interactionMode === 'view' || interactionMode === 'image' ? (isPanning ? 'grabbing' : 'grab') : 'default'
         }}
+        onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onClick={handleContainerClick}
       >
         {!imageBitmap ? (
-          <p style={{ fontWeight: 'bold', opacity: 0.5 }}>No Image Loaded</p>
+          <div style={{ textAlign: 'center', opacity: 0.5 }}>
+            <p style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '0.5rem' }}>Empty Canvas</p>
+            <p>Set a Background image from the top toolbar or select a wallpaper.</p>
+          </div>
         ) : (
-          <>
+          <div 
+            ref={workspaceRef}
+            style={{ 
+              position: 'relative',
+              transform: `translate(${viewPan.x}px, ${viewPan.y}px) scale(${viewZoom})`,
+              transformOrigin: 'center center',
+              willChange: 'transform'
+            }}
+          >
             <canvas 
               ref={canvasRef} 
               className="brutalist-shadow"
               style={{ 
-                maxWidth: '100%', 
-                maxHeight: '100%',
+                display: 'block',
                 backgroundColor: '#fff'
               }} 
             />
-            {/* Render Text Overlays. Note: scale here refers to the scale between the original image and the preview, which requires using the first slice's textScale properties */}
             {(() => {
-              // Get the text scale factors
-              const { slices, targetWidth, targetHeight } = calculateSlices(imageBitmap.width, imageBitmap.height, gridCols, gridRows, paperSize, bleedMm, imageFit);
+              const { slices, targetWidth, targetHeight } = calculateSlices(imageBitmap.width, imageBitmap.height, gridCols, gridRows, paperSize, bleedMm, imageFit, imageZoom, imagePan);
               const slice = slices[0];
               if(!slice) return null;
               
               const posterWidth = targetWidth * gridCols;
               const displayScale = containerRef.current!.clientWidth / posterWidth;
               
-              return textOverlays.map(text => {
-                const screenX = ((text.x * slice.textScaleX) + slice.textOffsetX) * displayScale;
-                const screenY = ((text.y * slice.textScaleY) + slice.textOffsetY) * displayScale;
-                const screenFontSize = text.fontSize * slice.textScaleX * displayScale;
-                
-                return (
-                  <div
-                    key={text.id}
-                    onMouseDown={(e) => {
-                      setDraggingId(text.id);
-                      setSelectedTextId(text.id);
-                      e.stopPropagation(); // prevent background deselect
-                    }}
-                    style={{
-                      position: 'absolute',
-                      left: `${screenX}px`,
-                      top: `${screenY}px`,
-                      transform: 'translate(-50%, -50%)',
-                      fontSize: `${screenFontSize}px`,
-                      color: text.color,
-                      fontFamily: text.fontFamily,
-                      fontStyle: text.isItalic ? 'italic' : 'normal',
-                      fontWeight: text.isBold ? 'bold' : 'normal',
-                      cursor: draggingId === text.id ? 'grabbing' : 'grab',
-                      userSelect: 'none',
-                      textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
-                      padding: '10px',
-                      border: selectedTextId === text.id ? '2px dashed var(--text-color)' : '2px dashed transparent'
-                    }}
-                  >
-                    {text.text}
-                  </div>
-                );
-              });
+              return (
+                <>
+                  {/* Render Image Overlays */}
+                  {imageOverlays.map(overlay => (
+                    <FloatingImageLayer 
+                      key={overlay.id}
+                      overlay={overlay}
+                      isSelected={selectedImageId === overlay.id}
+                      onMouseDown={(e) => {
+                        if (interactionMode === 'text') {
+                          setDraggingId(overlay.id);
+                          setSelectedImageId(overlay.id);
+                          setSelectedTextId(null);
+                          e.stopPropagation();
+                        } else {
+                          setSelectedImageId(overlay.id);
+                          setSelectedTextId(null);
+                        }
+                      }}
+                      displayScale={displayScale}
+                      sliceTextScaleX={slice.textScaleX}
+                      sliceTextScaleY={slice.textScaleY}
+                      sliceTextOffsetX={slice.textOffsetX}
+                      sliceTextOffsetY={slice.textOffsetY}
+                      interactionMode={interactionMode}
+                      draggingId={draggingId}
+                    />
+                  ))}
+                  
+                  {/* Render Text Overlays */}
+                  {textOverlays.map(text => {
+                    const screenX = ((text.x * slice.textScaleX) + slice.textOffsetX) * displayScale;
+                    const screenY = ((text.y * slice.textScaleY) + slice.textOffsetY) * displayScale;
+                    const screenFontSize = text.fontSize * slice.textScaleX * displayScale;
+                    
+                    return (
+                      <div
+                        key={text.id}
+                        onMouseDown={(e) => {
+                          if (interactionMode === 'text') {
+                            setDraggingId(text.id);
+                            setSelectedTextId(text.id);
+                            setSelectedImageId(null);
+                            e.stopPropagation();
+                          } else {
+                            setSelectedTextId(text.id);
+                            setSelectedImageId(null);
+                          }
+                        }}
+                        style={{
+                          position: 'absolute',
+                          left: `${screenX}px`,
+                          top: `${screenY}px`,
+                          transform: 'translate(-50%, -50%)',
+                          fontSize: `${screenFontSize}px`,
+                          color: text.color,
+                          fontFamily: text.fontFamily,
+                          fontStyle: text.isItalic ? 'italic' : 'normal',
+                          fontWeight: text.isBold ? 'bold' : 'normal',
+                          cursor: interactionMode === 'text' ? (draggingId === text.id ? 'grabbing' : 'grab') : 'inherit',
+                          userSelect: 'none',
+                          textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000',
+                          padding: '10px',
+                          border: selectedTextId === text.id ? '2px dashed var(--text-color)' : '2px dashed transparent',
+                          zIndex: 999 // Ensure text is always on top of images
+                        }}
+                      >
+                        {text.text}
+                      </div>
+                    );
+                  })}
+                </>
+              );
             })()}
-          </>
+          </div>
         )}
       </div>
     </div>

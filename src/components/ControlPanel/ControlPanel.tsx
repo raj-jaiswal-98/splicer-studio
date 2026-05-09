@@ -13,7 +13,8 @@ const ControlPanel = () => {
     bleedMm, setBleedMm,
     imageFit, setImageFit,
     preserveRatio, setPreserveRatio,
-    imageBitmap
+    imageBitmap,
+    selectedImageId
   } = usePosterContext();
 
   const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -195,6 +196,58 @@ const ControlPanel = () => {
         </div>
       </BrutalAccordion>
       
+      {/* Dynamic toolbars based on selection */}
+      {selectedImageId && (
+        <BrutalAccordion title="Image Layer Controls" defaultOpen={true}>
+          {(() => {
+            const { imageOverlays, setImageOverlays, setImageBitmap, setImageMetadata, setSelectedImageId } = usePosterContext();
+            const overlay = imageOverlays.find(o => o.id === selectedImageId);
+            if (!overlay) return null;
+
+            const updateOverlay = (updates: any) => {
+              setImageOverlays(prev => prev.map(o => o.id === selectedImageId ? { ...o, ...updates } : o));
+            };
+
+            const handleSetAsBackground = () => {
+              setImageBitmap(overlay.imageBitmap);
+              setImageMetadata(overlay.metadata);
+              setImageOverlays(prev => prev.filter(o => o.id !== selectedImageId));
+              setSelectedImageId(null);
+            };
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>Scale: {overlay.scale.toFixed(2)}x</label>
+                  <input type="range" min="0.1" max="5" step="0.1" value={overlay.scale} onChange={(e) => updateOverlay({ scale: parseFloat(e.target.value) })} style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>Rotation: {overlay.rotation}°</label>
+                  <input type="range" min="-180" max="180" step="1" value={overlay.rotation} onChange={(e) => updateOverlay({ rotation: parseFloat(e.target.value) })} style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.25rem' }}>Opacity: {Math.round(overlay.opacity * 100)}%</label>
+                  <input type="range" min="0.1" max="1" step="0.05" value={overlay.opacity} onChange={(e) => updateOverlay({ opacity: parseFloat(e.target.value) })} style={{ width: '100%' }} />
+                </div>
+                <button className="brutalist-button" onClick={handleSetAsBackground}>
+                  Set as Background
+                </button>
+                <button 
+                  className="brutalist-button secondary" 
+                  onClick={() => {
+                    setImageOverlays(prev => prev.filter(o => o.id !== selectedImageId));
+                    setSelectedImageId(null);
+                  }}
+                  style={{ backgroundColor: '#ffcccc', color: '#cc0000', borderColor: '#cc0000' }}
+                >
+                  Delete Layer
+                </button>
+              </div>
+            );
+          })()}
+        </BrutalAccordion>
+      )}
+
       <ImageMetadataBox />
     </div>
   );
