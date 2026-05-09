@@ -235,7 +235,7 @@ const CanvasEditor = () => {
               }} 
             />
             {(() => {
-              const { slices, targetWidth, targetHeight } = calculateSlices(imageBitmap.width, imageBitmap.height, gridCols, gridRows, paperSize, bleedMm, imageFit, imageZoom, imagePan);
+              const { slices, targetWidth } = calculateSlices(imageBitmap.width, imageBitmap.height, gridCols, gridRows, paperSize, bleedMm, imageFit, imageZoom, imagePan);
               const slice = slices[0];
               if(!slice) return null;
               
