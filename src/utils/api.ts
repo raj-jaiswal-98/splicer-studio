@@ -67,21 +67,31 @@ export const fetchRedditWallpapers = async (query: string = '', after: string | 
   return { wallpapers, after: newAfter };
 };
 
-export interface PicsumImage {
+export interface NasaImage {
   id: string;
-  author: string;
-  width: number;
-  height: number;
   url: string;
-  download_url: string;
+  thumbnail: string;
+  title: string;
 }
 
-export const fetchPicsumImages = async (page = 1, limit = 20): Promise<PicsumImage[]> => {
+export const fetchNasaImages = async (query: string = 'nebula', page: number = 1): Promise<NasaImage[]> => {
   try {
-    const response = await fetch(`https://picsum.photos/v2/list?page=${page}&limit=${limit}`);
-    return await response.json();
+    const response = await fetch(`https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=image&page=${page}`);
+    const data = await response.json();
+    const items = data.collection.items;
+    
+    return items.map((item: any) => {
+      const data = item.data[0];
+      const links = item.links[0];
+      return {
+        id: data.nasa_id,
+        url: `https://images.weserv.nl/?url=${encodeURIComponent(item.href.replace('collection.json', 'orig.jpg'))}`, // Try to get high res
+        thumbnail: links.href,
+        title: data.title
+      };
+    });
   } catch (error) {
-    console.error("Failed to fetch Picsum images:", error);
+    console.error("Failed to fetch NASA images:", error);
     return [];
   }
 };
