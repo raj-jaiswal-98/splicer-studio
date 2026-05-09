@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { fetchRedditWallpapers, fetchNasaImages } from '../../utils/api';
+import { fetchRedditWallpapers, fetchNasaImages, fetchTvMazeImages } from '../../utils/api';
 import { usePosterContext } from '../../context/PosterContext';
 import { BrutalButton } from '../ui/BrutalButton';
-import { Search, Image as ImageIcon, Globe, Rocket, Layers } from 'lucide-react';
+import { Search, Image as ImageIcon, Globe, Rocket, Layers, Clapperboard } from 'lucide-react';
 
-type ImageSource = 'reddit' | 'nasa' | 'picsum';
+type ImageSource = 'reddit' | 'nasa' | 'picsum' | 'cinema';
 
 interface GalleryItem {
   id: string;
@@ -14,6 +14,7 @@ interface GalleryItem {
 }
 
 const TRENDING_TAGS = ['Cyberpunk', 'Nature', 'Minimalist', 'Abstract', 'Space', 'Architecture'];
+const CINEMA_TAGS = ['Breaking Bad', 'Inception', 'Star Wars', 'Marvel', 'Anime', 'Batman'];
 
 const WallpaperGallery = () => {
   const { setImageBitmap, setImageMetadata } = usePosterContext();
@@ -54,6 +55,9 @@ const WallpaperGallery = () => {
           title: `by ${d.author}`
         }));
         setPage(currentPage + 1);
+      } else if (source === 'cinema') {
+        const result = await fetchTvMazeImages(searchQuery || 'Batman');
+        newItems = result;
       }
 
       setItems(prev => reset ? newItems : [...prev, ...newItems]);
@@ -106,7 +110,7 @@ const WallpaperGallery = () => {
           <div style={{ display: 'flex', gap: '4px' }}>
             <button 
               onClick={() => setSource('reddit')}
-              title="Reddit"
+              title="Reddit Wallpapers"
               style={{
                 padding: '4px',
                 backgroundColor: source === 'reddit' ? 'var(--text-color)' : 'transparent',
@@ -118,8 +122,21 @@ const WallpaperGallery = () => {
               <Globe size={16} />
             </button>
             <button 
+              onClick={() => setSource('cinema')}
+              title="Movies & Shows"
+              style={{
+                padding: '4px',
+                backgroundColor: source === 'cinema' ? 'var(--text-color)' : 'transparent',
+                color: source === 'cinema' ? 'var(--bg-color)' : 'inherit',
+                border: '1px solid var(--text-color)',
+                cursor: 'pointer'
+              }}
+            >
+              <Clapperboard size={16} />
+            </button>
+            <button 
               onClick={() => setSource('nasa')}
-              title="NASA"
+              title="NASA Space"
               style={{
                 padding: '4px',
                 backgroundColor: source === 'nasa' ? 'var(--text-color)' : 'transparent',
@@ -132,7 +149,7 @@ const WallpaperGallery = () => {
             </button>
             <button 
               onClick={() => setSource('picsum')}
-              title="Picsum"
+              title="Art & Photography"
               style={{
                 padding: '4px',
                 backgroundColor: source === 'picsum' ? 'var(--text-color)' : 'transparent',
@@ -151,7 +168,7 @@ const WallpaperGallery = () => {
           <input 
             type="text" 
             className="brutalist-border"
-            placeholder={`Search ${source === 'reddit' ? 'Reddit' : source === 'nasa' ? 'NASA' : 'Picsum'}...`}
+            placeholder={`Search ${source === 'reddit' ? 'Reddit' : source === 'nasa' ? 'NASA' : source === 'cinema' ? 'Movies/Shows' : 'Picsum'}...`}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{ flex: 1, padding: '0.5rem', backgroundColor: 'var(--card-bg)', color: 'var(--text-color)', fontSize: '0.8rem' }}
@@ -161,10 +178,10 @@ const WallpaperGallery = () => {
           </BrutalButton>
         </form>
 
-        {/* Trending Tags (Only for Reddit/NASA) */}
+        {/* Trending Tags */}
         {source !== 'picsum' && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '1rem' }}>
-            {TRENDING_TAGS.map(tag => (
+            {(source === 'cinema' ? CINEMA_TAGS : TRENDING_TAGS).map(tag => (
               <button
                 key={tag}
                 onClick={() => handleTagClick(tag)}

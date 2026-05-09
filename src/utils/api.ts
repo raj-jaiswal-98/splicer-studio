@@ -85,13 +85,42 @@ export const fetchNasaImages = async (query: string = 'nebula', page: number = 1
       const links = item.links[0];
       return {
         id: data.nasa_id,
-        url: `https://images.weserv.nl/?url=${encodeURIComponent(item.href.replace('collection.json', 'orig.jpg'))}`, // Try to get high res
+        url: `https://images.weserv.nl/?url=${encodeURIComponent(item.href.replace('collection.json', 'orig.jpg'))}`,
         thumbnail: links.href,
         title: data.title
       };
     });
   } catch (error) {
     console.error("Failed to fetch NASA images:", error);
+    return [];
+  }
+};
+
+export interface TvMazeImage {
+  id: string;
+  url: string;
+  thumbnail: string;
+  title: string;
+}
+
+export const fetchTvMazeImages = async (query: string): Promise<TvMazeImage[]> => {
+  try {
+    const response = await fetch(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query)}`);
+    const data = await response.json();
+    
+    return data
+      .filter((item: any) => item.show.image)
+      .map((item: any) => {
+        const show = item.show;
+        return {
+          id: show.id.toString(),
+          url: `https://images.weserv.nl/?url=${encodeURIComponent(show.image.original)}`,
+          thumbnail: show.image.medium,
+          title: show.name
+        };
+      });
+  } catch (error) {
+    console.error("Failed to fetch TVMaze images:", error);
     return [];
   }
 };
