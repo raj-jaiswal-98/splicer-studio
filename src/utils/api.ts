@@ -7,14 +7,17 @@ export interface Wallpaper {
 }
 
 export const fetchRedditWallpapers = async (query: string = '', after: string | null = null): Promise<{ wallpapers: Wallpaper[], after: string | null }> => {
+  const isDev = import.meta.env.DEV;
+  const API_BASE = isDev ? '/reddit-api' : 'https://www.reddit.com';
+  // Use a public CORS proxy for images in production because i.redd.it doesn't allow cross-origin
+  const IMAGE_PROXY = isDev ? '/reddit-image' : 'https://corsproxy.io/?https://i.redd.it';
+  
   let endpoint = '';
   
   if (query) {
-    // Search within r/wallpapers and r/EarthPorn via Vite proxy
-    endpoint = `/reddit-api/r/wallpapers+EarthPorn/search.json?q=${encodeURIComponent(query)}&restrict_sr=on&sort=hot&limit=20`;
+    endpoint = `${API_BASE}/r/wallpapers+EarthPorn/search.json?q=${encodeURIComponent(query)}&restrict_sr=on&sort=hot&limit=20`;
   } else {
-    // Default hot trending wallpapers via Vite proxy
-    endpoint = `/reddit-api/r/wallpapers/hot.json?limit=20`;
+    endpoint = `${API_BASE}/r/wallpapers/hot.json?limit=20`;
   }
 
   if (after) {
@@ -22,7 +25,7 @@ export const fetchRedditWallpapers = async (query: string = '', after: string | 
   }
 
   const response = await fetch(endpoint);
-  if (!response.ok) throw new Error('Failed to fetch from Reddit via Vite Proxy');
+  if (!response.ok) throw new Error('Failed to fetch from Reddit. If in production, check CORS or Rate Limits.');
 
   const data = await response.json();
   const children = data.data.children;
@@ -34,7 +37,6 @@ export const fetchRedditWallpapers = async (query: string = '', after: string | 
     const post = child.data;
     if (post.is_video || !post.url) continue;
 
-    // Only accept direct image links
     if (post.url.match(/\.(jpeg|jpg|png)$/i) || post.url.includes('i.redd.it')) {
       
       let thumbnail = post.url;
@@ -44,16 +46,18 @@ export const fetchRedditWallpapers = async (query: string = '', after: string | 
         thumbnail = midRes.url.replace(/&amp;/g, '&');
       }
 
-      // Route i.redd.it links through our Vite image proxy so the Canvas can fetch them without CORS
       let proxiedUrl = post.url.replace(/&amp;/g, '&');
       if (proxiedUrl.startsWith('https://i.redd.it')) {
-        proxiedUrl = proxiedUrl.replace('https://i.redd.it', '/reddit-image');
+        proxiedUrl = proxiedUrl.replace('https://i.redd.it', IMAGE_PROXY);
+      } else if (!isDev && proxiedUrl.startsWith('https://')) {
+        // For other high-res sources in production, also try proxying
+        proxiedUrl = `https://corsproxy.io/?${proxiedUrl}`;
       }
 
       wallpapers.push({
         id: post.id,
         url: proxiedUrl,
-        thumbnail: thumbnail, // img tags ignore CORS, so we can keep the direct link for thumbnails
+        thumbnail: thumbnail,
         title: post.title || 'Reddit Wallpaper',
         source: 'reddit'
       });

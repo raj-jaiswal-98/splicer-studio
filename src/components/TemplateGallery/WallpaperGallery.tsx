@@ -28,7 +28,7 @@ const WallpaperGallery = () => {
       setAfterToken(newAfter);
     } catch (err: any) {
       console.error('Failed to load wallpapers', err);
-      setError('Failed to load wallpapers from Reddit. Ensure Vite proxy is running.');
+      setError('Failed to load wallpapers from Reddit. This can happen due to rate limiting or CORS issues.');
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,6 @@ const WallpaperGallery = () => {
 
   const handleSelectWallpaper = async (wallpaper: Wallpaper) => {
     try {
-      // The URL is already routed through our Vite /reddit-image proxy, so CORS is fully bypassed!
       const response = await fetch(wallpaper.url);
       const blob = await response.blob();
       const bitmap = await window.createImageBitmap(blob);
@@ -63,7 +62,7 @@ const WallpaperGallery = () => {
       });
     } catch (err) {
       console.error('Failed to load full image:', err);
-      alert('Could not load the high-resolution image. Make sure your Vite dev server is running and proxying correctly.');
+      alert('Could not load the high-resolution image. This may be due to CORS restrictions on the source image.');
     }
   };
 
